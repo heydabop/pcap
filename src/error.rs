@@ -58,3 +58,89 @@ impl fmt::Display for PacketExceededLength {
 }
 
 impl Error for PacketExceededLength {}
+
+#[derive(Debug)]
+pub struct UnsupportedLinkLayer {
+    link_layer_type: u32,
+}
+
+impl UnsupportedLinkLayer {
+    pub fn new(l: u32) -> Self {
+        Self { link_layer_type: l }
+    }
+}
+
+impl fmt::Display for UnsupportedLinkLayer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Missing support for link layer type {}",
+            self.link_layer_type
+        )
+    }
+}
+
+impl Error for UnsupportedLinkLayer {}
+
+#[derive(Debug)]
+pub struct UnsupportedEtherType {
+    ether_type: [u8; 2],
+}
+
+impl UnsupportedEtherType {
+    pub fn new(e: &[u8]) -> Self {
+        Self {
+            ether_type: [e[0], e[1]],
+        }
+    }
+}
+
+impl fmt::Display for UnsupportedEtherType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Missing support for EtherType [{}, {}]",
+            self.ether_type[0], self.ether_type[1]
+        )
+    }
+}
+
+impl Error for UnsupportedEtherType {}
+
+#[derive(Debug)]
+pub struct InvalidIPv4Header {
+    reason: String,
+}
+
+impl InvalidIPv4Header {
+    pub fn new(reason: String) -> Self {
+        Self { reason }
+    }
+}
+
+impl fmt::Display for InvalidIPv4Header {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &self.reason)
+    }
+}
+
+impl Error for InvalidIPv4Header {}
+
+#[derive(Debug)]
+pub struct UnsupportedProtocol {
+    protocol: u8,
+}
+
+impl UnsupportedProtocol {
+    pub fn new(protocol: u8) -> Self {
+        Self { protocol }
+    }
+}
+
+impl fmt::Display for UnsupportedProtocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Missing support for protocol {}", self.protocol)
+    }
+}
+
+impl Error for UnsupportedProtocol {}

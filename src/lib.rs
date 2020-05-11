@@ -10,6 +10,7 @@ pub struct Reader<T: Read> {
     reverse: bool,
     source: T,
     max_length: u32,
+    data_link_type: u32,
 }
 
 impl<T: Read> Reader<T> {
@@ -37,14 +38,22 @@ impl<T: Read> Reader<T> {
             global_header[19],
         ]);
 
+        self.data_link_type = u32::from_ne_bytes([
+            global_header[20],
+            global_header[21],
+            global_header[22],
+            global_header[23],
+        ]);
+
         Ok(())
     }
 
-    fn new(source: T) -> Result<Self, Box<dyn Error>> {
+    pub fn new(source: T) -> Result<Self, Box<dyn Error>> {
         let mut this = Self {
             source,
             reverse: false,
             max_length: 0,
+            data_link_type: 0,
         };
 
         if let Err(e) = this.parse_global_header() {
@@ -54,7 +63,7 @@ impl<T: Read> Reader<T> {
         Ok(this)
     }
 
-    fn read_packet(&mut self) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn read_packet(&mut self) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut packet_header = [0; 16];
         self.source.read_exact(&mut packet_header)?;
 
@@ -77,16 +86,33 @@ impl<T: Read> Reader<T> {
 
         return Ok(packet);
     }
+
+    // strip headers based on link-layer type
+    pub fn data<'a>(&self, packet: &'a [u8]) -> Result<&'a [u8], Box<dyn Error>> {
+        if self.data_link_type != 1 {
+            return Err(Box::new(error::UnsupportedLinkLayer::new(
+                self.data_link_type,
+            )));
+        }
+
+        let ether_type = &packet[12..14];
+        match ether_type {
+            [8, 0] => data_from_ipv4(&packet[14..packet.len()]),
+            //[0x86, 0xDD] => data_from_ipv6(&packet[14..packet.len()]),
+            _ => Err(Box::new(error::UnsupportedEtherType::new(ether_type))),
+        }
+    }
 }
 
 impl Reader<File> {
-    fn from_file(path: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn from_file(path: &str) -> Result<Self, Box<dyn Error>> {
         let source = File::open(path)?;
 
         let mut this = Self {
             source,
             reverse: false,
             max_length: 0,
+            data_link_type: 0,
         };
 
         if let Err(e) = this.parse_global_header() {
@@ -95,6 +121,32 @@ impl Reader<File> {
 
         Ok(this)
     }
+}
+
+fn data_from_ipv4(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {
+    let version = u8::from_be_bytes([packet[0] >> 4]);
+    if version != 4 {
+        return Err(Box::new(error::InvalidIPv4Header::new(
+            format!("Expected version 4, got version {}", version).to_string(),
+        )));
+    }
+
+    let header_length = (u8::from_be_bytes([packet[0] & 0xf]) * 4) as usize;
+    let total_length = u16::from_be_bytes([packet[2], packet[3]]) as usize;
+
+    let protocol = u8::from_be_bytes([packet[9]]);
+    match protocol {
+        6 => Ok(data_from_tcp(&packet[header_length..total_length])),
+        _ => Err(Box::new(error::UnsupportedProtocol::new(protocol))),
+    }
+}
+
+//fn data_from_ipv6(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {}
+
+fn data_from_tcp(packet: &[u8]) -> &[u8] {
+    let data_offset = (u8::from_be_bytes([packet[12] >> 4]) * 4) as usize;
+
+    &packet[data_offset..packet.len()]
 }
 
 #[cfg(test)]
@@ -122,5 +174,41 @@ mod tests {
     #[test]
     fn new_from_file() {
         Reader::from_file("packets.pcap").unwrap();
+    }
+
+    #[test]
+    fn data() {
+        let v: Vec<u8> = vec![
+            0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0, 0, 0,
+        ];
+        let reader = Reader::new(v.as_slice()).unwrap();
+        let p = vec![
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00,
+            0x45, 0x00, 0x00, 0x43, 0xdb, 0xb5, 0x00, 0x00, 0x40, 0x06, 0xa0, 0xfd, 0x7f, 0x00,
+            0x00, 0x01, 0x7f, 0x00, 0x00, 0x01, 0x98, 0x77, 0x1e, 0x61, 0x40, 0x4a, 0xf2, 0x2b,
+            0xbf, 0xe5, 0xf2, 0x2e, 0x80, 0x18, 0x02, 0x00, 0xfe, 0x37, 0x00, 0x00, 0x01, 0x01,
+            0x08, 0x0a, 0x60, 0xed, 0x00, 0x35, 0x60, 0xed, 0x00, 0x30, 0x0f, 0x00, 0x01, 0x0b,
+            0x54, 0x65, 0x72, 0x72, 0x61, 0x72, 0x69, 0x61, 0x31, 0x39, 0x34,
+        ];
+        let data = reader.data(&p).unwrap();
+        let data_test = [
+            0x0f, 0x00, 0x01, 0x0b, 0x54, 0x65, 0x72, 0x72, 0x61, 0x72, 0x69, 0x61, 0x31, 0x39,
+            0x34,
+        ];
+        assert_eq!(data, data_test);
+
+        let p2 = vec![
+            0x4c, 0xcc, 0x6a, 0x49, 0x25, 0xd4, 0x48, 0x5b, 0x39, 0x7b, 0x25, 0x19, 0x08, 0x00,
+            0x45, 0x00, 0x00, 0x37, 0xe2, 0x04, 0x40, 0x00, 0x80, 0x06, 0x94, 0xd9, 0xc0, 0xa8,
+            0x01, 0x8f, 0xc0, 0xa8, 0x01, 0x03, 0xcd, 0x6e, 0x1e, 0x61, 0xc5, 0x33, 0xee, 0x9f,
+            0x06, 0x51, 0xff, 0xc4, 0x50, 0x18, 0x20, 0x14, 0x5f, 0x1d, 0x00, 0x00, 0x0f, 0x00,
+            0x01, 0x0b, 0x54, 0x65, 0x72, 0x72, 0x61, 0x72, 0x69, 0x61, 0x31, 0x39, 0x34,
+        ];
+        let data2 = reader.data(&p2).unwrap();
+        let data2_test = [
+            0x0f, 0x00, 0x01, 0x0b, 0x54, 0x65, 0x72, 0x72, 0x61, 0x72, 0x69, 0x61, 0x31, 0x39,
+            0x34,
+        ];
+        assert_eq!(data2, data2_test);
     }
 }
