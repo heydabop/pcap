@@ -34,3 +34,27 @@ impl fmt::Display for UnsupportedVersion {
 }
 
 impl Error for UnsupportedVersion {}
+
+#[derive(Debug)]
+pub struct PacketExceededLength {
+    max_length: u32,
+    length: u32,
+}
+
+impl PacketExceededLength {
+    pub fn new(max_length: u32, length: u32) -> Self {
+        Self { max_length, length }
+    }
+}
+
+impl fmt::Display for PacketExceededLength {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Packet length of {} exceeds max global header length of {}",
+            self.length, self.max_length
+        )
+    }
+}
+
+impl Error for PacketExceededLength {}
