@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, clippy::missing_errors_doc)]
 
 mod error;
 
@@ -84,7 +84,7 @@ impl<T: Read> Reader<T> {
         let mut packet = vec![0; length as usize];
         self.source.read_exact(&mut packet)?;
 
-        return Ok(packet);
+        Ok(packet)
     }
 
     // strip headers based on link-layer type
@@ -98,7 +98,7 @@ impl<T: Read> Reader<T> {
         let ether_type = &packet[12..14];
         match ether_type {
             [8, 0] => data_from_ipv4(&packet[14..packet.len()]),
-            //[0x86, 0xDD] => data_from_ipv6(&packet[14..packet.len()]),
+            [0x86, 0xDD] => data_from_ipv6(&packet[14..packet.len()]),
             _ => Err(Box::new(error::UnsupportedEtherType::new(ether_type))),
         }
     }
@@ -126,9 +126,10 @@ impl Reader<File> {
 fn data_from_ipv4(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {
     let version = u8::from_be_bytes([packet[0] >> 4]);
     if version != 4 {
-        return Err(Box::new(error::InvalidIPv4Header::new(
-            format!("Expected version 4, got version {}", version).to_string(),
-        )));
+        return Err(Box::new(error::InvalidIPHeader::new(format!(
+            "Expected version 4, got version {}",
+            version
+        ))));
     }
 
     let header_length = (u8::from_be_bytes([packet[0] & 0xf]) * 4) as usize;
@@ -141,7 +142,23 @@ fn data_from_ipv4(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {
     }
 }
 
-//fn data_from_ipv6(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {}
+fn data_from_ipv6(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {
+    let version = u8::from_be_bytes([packet[0] >> 4]);
+    if version != 4 {
+        return Err(Box::new(error::InvalidIPHeader::new(format!(
+            "Expected version 6, got version {}",
+            version
+        ))));
+    }
+
+    let length = u16::from_be_bytes([packet[4], packet[5]]) as usize;
+
+    let protocol = u8::from_be_bytes([packet[6]]);
+    match protocol {
+        6 => Ok(data_from_tcp(&packet[40..length])),
+        _ => Err(Box::new(error::UnsupportedProtocol::new(protocol))),
+    }
+}
 
 fn data_from_tcp(packet: &[u8]) -> &[u8] {
     let data_offset = (u8::from_be_bytes([packet[12] >> 4]) * 4) as usize;

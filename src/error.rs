@@ -108,23 +108,23 @@ impl fmt::Display for UnsupportedEtherType {
 impl Error for UnsupportedEtherType {}
 
 #[derive(Debug)]
-pub struct InvalidIPv4Header {
+pub struct InvalidIPHeader {
     reason: String,
 }
 
-impl InvalidIPv4Header {
+impl InvalidIPHeader {
     pub fn new(reason: String) -> Self {
         Self { reason }
     }
 }
 
-impl fmt::Display for InvalidIPv4Header {
+impl fmt::Display for InvalidIPHeader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", &self.reason)
     }
 }
 
-impl Error for InvalidIPv4Header {}
+impl Error for InvalidIPHeader {}
 
 #[derive(Debug)]
 pub struct UnsupportedProtocol {
