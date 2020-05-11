@@ -4,7 +4,7 @@ mod error;
 
 use std::error::Error;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 
 pub struct Reader<T: Read> {
     reverse: bool,
@@ -104,9 +104,10 @@ impl<T: Read> Reader<T> {
     }
 }
 
-impl Reader<File> {
+impl Reader<BufReader<File>> {
     pub fn from_file(path: &str) -> Result<Self, Box<dyn Error>> {
-        let source = File::open(path)?;
+        let file = File::open(path)?;
+        let source = BufReader::new(file);
 
         let mut this = Self {
             source,
