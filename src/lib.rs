@@ -6,16 +6,26 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
+pub struct Packet {
+    epoch_seconds: u32,
+    bytes: Vec<u8>,
+}
+
+impl Packet {
+    pub fn epoch_seconds(&self) -> u32 {
+        self.epoch_seconds
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
 pub struct Reader<T: Read> {
     reverse: bool,
     source: T,
     max_length: u32,
     data_link_type: u32,
-}
-
-pub struct Packet {
-    epoch_seconds: u32,
-    bytes: Vec<u8>,
 }
 
 impl<T: Read> Reader<T> {
