@@ -12,10 +12,12 @@ pub struct Packet {
 }
 
 impl Packet {
+    #[must_use]
     pub fn epoch_seconds(&self) -> u32 {
         self.epoch_seconds
     }
 
+    #[must_use]
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
