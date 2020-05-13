@@ -13,6 +13,11 @@ pub struct Reader<T: Read> {
     data_link_type: u32,
 }
 
+pub struct Packet {
+    epoch_seconds: u32,
+    bytes: Vec<u8>,
+}
+
 impl<T: Read> Reader<T> {
     fn parse_global_header(&mut self) -> Result<(), Box<dyn Error>> {
         let mut global_header = [0; 24];
@@ -63,9 +68,16 @@ impl<T: Read> Reader<T> {
         Ok(this)
     }
 
-    pub fn read_packet(&mut self) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn read_packet(&mut self) -> Result<Packet, Box<dyn Error>> {
         let mut packet_header = [0; 16];
         self.source.read_exact(&mut packet_header)?;
+
+        let epoch_seconds = u32::from_ne_bytes([
+            packet_header[0],
+            packet_header[1],
+            packet_header[2],
+            packet_header[3],
+        ]);
 
         let length = u32::from_ne_bytes([
             packet_header[8],
@@ -81,10 +93,13 @@ impl<T: Read> Reader<T> {
             )));
         }
 
-        let mut packet = vec![0; length as usize];
-        self.source.read_exact(&mut packet)?;
+        let mut bytes = vec![0; length as usize];
+        self.source.read_exact(&mut bytes)?;
 
-        Ok(packet)
+        Ok(Packet {
+            epoch_seconds,
+            bytes,
+        })
     }
 
     // strip headers based on link-layer type
@@ -186,7 +201,7 @@ mod tests {
             0xa4, 0x93, 0xb8, 0x5e, 0xb6, 9, 0x0d, 0, 4, 0, 0, 0, 4, 0, 0, 0, 1, 2, 3, 4,
         ];
         let mut r = Reader::new(v.as_slice()).unwrap();
-        assert_eq!(r.read_packet().unwrap(), vec![1, 2, 3, 4]);
+        assert_eq!(r.read_packet().unwrap().bytes, vec![1, 2, 3, 4]);
     }
 
     #[test]
