@@ -3,8 +3,8 @@
 mod error;
 
 use std::error::Error;
-use std::fs::File;
-use std::io::{BufReader, Read};
+use tokio::fs::File;
+use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 
 pub struct Packet {
     epoch_seconds: u32,
@@ -23,17 +23,17 @@ impl Packet {
     }
 }
 
-pub struct Reader<T: Read> {
+pub struct Reader<T: AsyncRead> {
     reverse: bool,
     source: T,
     max_length: u32,
     data_link_type: u32,
 }
 
-impl<T: Read> Reader<T> {
-    fn parse_global_header(&mut self) -> Result<(), Box<dyn Error>> {
+impl<T: AsyncRead + std::marker::Unpin> Reader<T> {
+    async fn parse_global_header(&mut self) -> Result<(), Box<dyn Error>> {
         let mut global_header = [0; 24];
-        self.source.read_exact(&mut global_header)?;
+        self.source.read_exact(&mut global_header).await?;
 
         self.reverse = if global_header[0..4] == [0xa1, 0xb2, 0xc3, 0xd4] {
             false
@@ -65,7 +65,7 @@ impl<T: Read> Reader<T> {
         Ok(())
     }
 
-    pub fn new(source: T) -> Result<Self, Box<dyn Error>> {
+    pub async fn new(source: T) -> Result<Self, Box<dyn Error>> {
         let mut this = Self {
             source,
             reverse: false,
@@ -73,16 +73,14 @@ impl<T: Read> Reader<T> {
             data_link_type: 0,
         };
 
-        if let Err(e) = this.parse_global_header() {
-            return Err(e);
-        }
+        this.parse_global_header().await?;
 
         Ok(this)
     }
 
-    pub fn read_packet(&mut self) -> Result<Packet, Box<dyn Error>> {
+    pub async fn read_packet(&mut self) -> Result<Packet, Box<dyn Error>> {
         let mut packet_header = [0; 16];
-        self.source.read_exact(&mut packet_header)?;
+        self.source.read_exact(&mut packet_header).await?;
 
         let epoch_seconds = u32::from_ne_bytes([
             packet_header[0],
@@ -106,7 +104,7 @@ impl<T: Read> Reader<T> {
         }
 
         let mut bytes = vec![0; length as usize];
-        self.source.read_exact(&mut bytes)?;
+        self.source.read_exact(&mut bytes).await?;
 
         Ok(Packet {
             epoch_seconds,
@@ -132,8 +130,8 @@ impl<T: Read> Reader<T> {
 }
 
 impl Reader<BufReader<File>> {
-    pub fn from_file(path: &str) -> Result<Self, Box<dyn Error>> {
-        let file = File::open(path)?;
+    pub async fn from_file(path: &str) -> Result<Self, Box<dyn Error>> {
+        let file = File::open(path).await?;
         let source = BufReader::new(file);
 
         let mut this = Self {
@@ -143,9 +141,7 @@ impl Reader<BufReader<File>> {
             data_link_type: 0,
         };
 
-        if let Err(e) = this.parse_global_header() {
-            return Err(e);
-        }
+        this.parse_global_header().await?;
 
         Ok(this)
     }
@@ -198,35 +194,35 @@ fn data_from_tcp(packet: &[u8]) -> &[u8] {
 mod tests {
     use super::Reader;
 
-    #[test]
-    fn new_from_reader() {
+    #[tokio::test]
+    async fn new_from_reader() {
         let v: Vec<u8> = vec![
             0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0, 0, 0,
         ];
-        Reader::new(v.as_slice()).unwrap();
+        Reader::new(v.as_slice()).await.unwrap();
     }
 
-    #[test]
-    fn read_from_reader() {
+    #[tokio::test]
+    async fn read_from_reader() {
         let v: Vec<u8> = vec![
             0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0, 0, 0,
             0xa4, 0x93, 0xb8, 0x5e, 0xb6, 9, 0x0d, 0, 4, 0, 0, 0, 4, 0, 0, 0, 1, 2, 3, 4,
         ];
-        let mut r = Reader::new(v.as_slice()).unwrap();
-        assert_eq!(r.read_packet().unwrap().bytes, vec![1, 2, 3, 4]);
+        let mut r = Reader::new(v.as_slice()).await.unwrap();
+        assert_eq!(r.read_packet().await.unwrap().bytes, vec![1, 2, 3, 4]);
     }
 
-    #[test]
-    fn new_from_file() {
-        Reader::from_file("packets.pcap").unwrap();
+    #[tokio::test]
+    async fn new_from_file() {
+        Reader::from_file("packets.pcap").await.unwrap();
     }
 
-    #[test]
-    fn data() {
+    #[tokio::test]
+    async fn data() {
         let v: Vec<u8> = vec![
             0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 0, 0, 0,
         ];
-        let reader = Reader::new(v.as_slice()).unwrap();
+        let reader = Reader::new(v.as_slice()).await.unwrap();
         let p = vec![
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00,
             0x45, 0x00, 0x00, 0x43, 0xdb, 0xb5, 0x00, 0x00, 0x40, 0x06, 0xa0, 0xfd, 0x7f, 0x00,
