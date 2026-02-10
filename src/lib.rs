@@ -168,7 +168,7 @@ fn data_from_ipv4(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {
 
 fn data_from_ipv6(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {
     let version = u8::from_be_bytes([packet[0] >> 4]);
-    if version != 4 {
+    if version != 6 {
         return Err(Box::new(error::InvalidIPHeader::new(format!(
             "Expected version 6, got version {}",
             version
