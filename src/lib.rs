@@ -179,7 +179,7 @@ fn data_from_ipv6(packet: &[u8]) -> Result<&[u8], Box<dyn Error>> {
 
     let protocol = u8::from_be_bytes([packet[6]]);
     match protocol {
-        6 => Ok(data_from_tcp(&packet[40..length])),
+        6 => Ok(data_from_tcp(&packet[40..40 + length])),
         _ => Err(Box::new(error::UnsupportedProtocol::new(protocol))),
     }
 }
