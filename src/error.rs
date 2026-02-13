@@ -1,146 +1,71 @@
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fmt;
+use tokio::io;
 
 #[derive(Debug)]
-pub struct InvalidHeader {}
+pub enum Error {
+    InvalidHeader,
+    UnsupportedPCAPVersion {
+        major_version: u16,
+        minor_version: u16,
+    },
+    PacketExceededLength {
+        max_length: u32,
+        length: u32,
+    },
+    UnsupportedLinkLayer(u32),
+    InvalidPacket(String),
+    UnsupportedEtherType([u8; 2]),
+    InvalidIPHeader(String),
+    UnsupportedProtocol(u8),
+    IO(io::Error),
+}
 
-impl fmt::Display for InvalidHeader {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Magic number not found at start of file")
-    }
-}
-
-impl Error for InvalidHeader {}
-
-#[derive(Debug)]
-pub struct UnsupportedVersion {
-    version: u16,
-}
-
-impl UnsupportedVersion {
-    pub fn new(version: u16) -> Self {
-        Self { version }
-    }
-}
-
-impl fmt::Display for UnsupportedVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Library only supports major version 2, found major version {}",
-            self.version
-        )
-    }
-}
-
-impl Error for UnsupportedVersion {}
-
-#[derive(Debug)]
-pub struct PacketExceededLength {
-    max_length: u32,
-    length: u32,
-}
-
-impl PacketExceededLength {
-    pub fn new(max_length: u32, length: u32) -> Self {
-        Self { max_length, length }
-    }
-}
-
-impl fmt::Display for PacketExceededLength {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Packet length of {} exceeds max global header length of {}",
-            self.length, self.max_length
-        )
-    }
-}
-
-impl Error for PacketExceededLength {}
-
-#[derive(Debug)]
-pub struct UnsupportedLinkLayer {
-    link_layer_type: u32,
-}
-
-impl UnsupportedLinkLayer {
-    pub fn new(l: u32) -> Self {
-        Self { link_layer_type: l }
-    }
-}
-
-impl fmt::Display for UnsupportedLinkLayer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Missing support for link layer type {}",
-            self.link_layer_type
-        )
-    }
-}
-
-impl Error for UnsupportedLinkLayer {}
-
-#[derive(Debug)]
-pub struct UnsupportedEtherType {
-    ether_type: [u8; 2],
-}
-
-impl UnsupportedEtherType {
-    pub fn new(e: &[u8]) -> Self {
-        Self {
-            ether_type: [e[0], e[1]],
+        use Error::*;
+        match self {
+            InvalidHeader => write!(f, "magic number not found at start of file"),
+            UnsupportedPCAPVersion {
+                major_version,
+                minor_version,
+            } => write!(
+                f,
+                "library only supports version 2.4, found version {major_version}.{minor_version}",
+            ),
+            PacketExceededLength { max_length, length } => write!(
+                f,
+                "packet length of {length} exceeds max global header length of {max_length}",
+            ),
+            UnsupportedLinkLayer(link_layer_type) => {
+                write!(f, "unsupported link layer type {link_layer_type}")
+            }
+            InvalidPacket(s) => write!(f, "invalid packet: {s}"),
+            UnsupportedEtherType(ether_type) => {
+                write!(
+                    f,
+                    "unsupported ethertype [{}, {}]",
+                    ether_type[0], ether_type[1]
+                )
+            }
+            InvalidIPHeader(reason) => write!(f, "invalid ip header: {reason}"),
+            UnsupportedProtocol(protocol) => write!(f, "unsupported protocol {protocol}"),
+            IO(e) => write!(f, "underlying IO error: {e}",),
         }
     }
 }
 
-impl fmt::Display for UnsupportedEtherType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Missing support for EtherType [{}, {}]",
-            self.ether_type[0], self.ether_type[1]
-        )
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Error::IO(e)
     }
 }
 
-impl Error for UnsupportedEtherType {}
-
-#[derive(Debug)]
-pub struct InvalidIPHeader {
-    reason: String,
-}
-
-impl InvalidIPHeader {
-    pub fn new(reason: String) -> Self {
-        Self { reason }
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            Self::IO(e) => Some(e),
+            _ => None,
+        }
     }
 }
-
-impl fmt::Display for InvalidIPHeader {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.reason)
-    }
-}
-
-impl Error for InvalidIPHeader {}
-
-#[derive(Debug)]
-pub struct UnsupportedProtocol {
-    protocol: u8,
-}
-
-impl UnsupportedProtocol {
-    pub fn new(protocol: u8) -> Self {
-        Self { protocol }
-    }
-}
-
-impl fmt::Display for UnsupportedProtocol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Missing support for protocol {}", self.protocol)
-    }
-}
-
-impl Error for UnsupportedProtocol {}
