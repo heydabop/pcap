@@ -190,14 +190,14 @@ fn data_from_ipv4(packet: &[u8]) -> Result<&[u8], Error> {
 
     #[allow(clippy::indexing_slicing, reason = "checked packet length >= 20")]
     let protocol = u8::from_be_bytes([packet[9]]);
+    let payload = packet
+        .get(header_length..total_length)
+        .ok_or(Error::InvalidPacket(
+            "IPv4 packet shorter than length in header".into(),
+        ))?;
     match protocol {
-        6 => data_from_tcp(
-            packet
-                .get(header_length..total_length)
-                .ok_or(Error::InvalidPacket(
-                    "IPv4 packet shorter than length in header".into(),
-                ))?,
-        ),
+        6 => data_from_tcp(payload),
+        17 => data_from_udp(payload),
         _ => Err(Error::UnsupportedProtocol(protocol)),
     }
 }
@@ -222,10 +222,12 @@ fn data_from_ipv6(packet: &[u8]) -> Result<&[u8], Error> {
 
     #[allow(clippy::indexing_slicing, reason = "checked packet length >= 40")]
     let protocol = u8::from_be_bytes([packet[6]]);
+    let payload = packet.get(40..40 + length).ok_or(Error::InvalidPacket(
+        "IPv6 packet shorter than length in header".into(),
+    ))?;
     match protocol {
-        6 => data_from_tcp(packet.get(40..40 + length).ok_or(Error::InvalidPacket(
-            "IPv6 packet shorter than length in header".into(),
-        ))?),
+        6 => data_from_tcp(payload),
+        17 => data_from_udp(payload),
         _ => Err(Error::UnsupportedProtocol(protocol)),
     }
 }
@@ -242,6 +244,22 @@ fn data_from_tcp(packet: &[u8]) -> Result<&[u8], Error> {
     let data_offset = (u8::from_be_bytes([packet[12] >> 4]) * 4) as usize;
 
     packet.get(data_offset..).ok_or(Error::InvalidPacket(
+        "data offset from header beyond end of packet".into(),
+    ))
+}
+
+fn data_from_udp(packet: &[u8]) -> Result<&[u8], Error> {
+    if packet.len() < 8 {
+        return Err(Error::InvalidPacket(format!(
+            "missing complete UDP header, datagram is only {} bytes",
+            packet.len()
+        )));
+    }
+
+    #[allow(clippy::indexing_slicing, reason = "checked packet length >= 8")]
+    let length = u16::from_be_bytes([packet[4], packet[5]]) as usize;
+
+    packet.get(8..length).ok_or(Error::InvalidPacket(
         "data offset from header beyond end of packet".into(),
     ))
 }
