@@ -1,5 +1,5 @@
 use std::error::Error as StdError;
-use std::fmt;
+use std::{array, fmt};
 use tokio::io;
 
 #[derive(Debug)]
@@ -19,6 +19,7 @@ pub enum Error {
     InvalidIPHeader(String),
     UnsupportedProtocol(u8),
     IO(io::Error),
+    TryFromSlice(array::TryFromSliceError),
 }
 
 impl fmt::Display for Error {
@@ -50,7 +51,8 @@ impl fmt::Display for Error {
             }
             InvalidIPHeader(reason) => write!(f, "invalid ip header: {reason}"),
             UnsupportedProtocol(protocol) => write!(f, "unsupported protocol {protocol}"),
-            IO(e) => write!(f, "underlying IO error: {e}",),
+            IO(e) => write!(f, "underlying IO error: {e}"),
+            TryFromSlice(e) => write!(f, "unable to convert slice to array: {e}"),
         }
     }
 }
@@ -58,6 +60,12 @@ impl fmt::Display for Error {
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
         Error::IO(e)
+    }
+}
+
+impl From<array::TryFromSliceError> for Error {
+    fn from(e: array::TryFromSliceError) -> Self {
+        Error::TryFromSlice(e)
     }
 }
 
