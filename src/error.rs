@@ -14,6 +14,7 @@ pub enum Error {
         length: u32,
     },
     UnsupportedLinkLayer(u32),
+    UnsupportedTransport(u8),
     InvalidPacket(String),
     UnsupportedEtherType([u8; 2]),
     InvalidIPHeader(String),
@@ -40,6 +41,9 @@ impl fmt::Display for Error {
             ),
             UnsupportedLinkLayer(link_layer_type) => {
                 write!(f, "unsupported link layer type {link_layer_type}")
+            }
+            UnsupportedTransport(transport_protocol) => {
+                write!(f, "unsupported transport protocol {transport_protocol}")
             }
             InvalidPacket(s) => write!(f, "invalid packet: {s}"),
             UnsupportedEtherType(ether_type) => {
