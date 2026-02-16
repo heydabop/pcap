@@ -442,24 +442,27 @@ mod tests {
 
     #[tokio::test]
     async fn ipv4_address() {
-        let mut reader = Reader::from_file("example_tcpping.pcap").await.unwrap();
+        let mut reader = Reader::from_file("tcpping4.pcap").await.unwrap();
         let packet = reader.read_packet().await.unwrap();
         let source_ip_address = packet.source_ip_address().unwrap();
-        //removed
+        assert_eq!(source_ip_address, IpAddr::from([192, 168, 1, 2]));
         let desintation_ip_address = packet.destination_ip_address().unwrap();
-        assert_eq!(desintation_ip_address, IpAddr::from([104, 18, 26, 120]));
+        assert_eq!(desintation_ip_address, IpAddr::from([192, 168, 1, 1]));
     }
 
     #[tokio::test]
     async fn ipv6_address() {
-        let mut reader = Reader::from_file("example6_tcpping.pcap").await.unwrap();
+        let mut reader = Reader::from_file("tcpping6.pcap").await.unwrap();
         let packet = reader.read_packet().await.unwrap();
         let source_ip_address = packet.source_ip_address().unwrap();
-        //removed
+        assert_eq!(
+            source_ip_address,
+            "fe80::2e0:4cff:fe68:6352".parse::<IpAddr>().unwrap()
+        );
         let desintation_ip_address = packet.destination_ip_address().unwrap();
         assert_eq!(
             desintation_ip_address,
-            "2606:4700::6812:1b78".parse::<IpAddr>().unwrap()
+            "fe80::51d8:8e97:c7e5:b925".parse::<IpAddr>().unwrap()
         );
     }
 }
