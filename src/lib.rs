@@ -2,7 +2,9 @@ pub mod error;
 pub mod packet;
 pub mod reader;
 
-use error::Error;
+pub use error::Error;
+pub use packet::Packet;
+pub use reader::Reader;
 
 // https://www.ietf.org/archive/id/draft-ietf-opsawg-pcaplinktype-00.html#name-linktype-registry
 #[derive(PartialEq, Eq, Clone, Copy)]
