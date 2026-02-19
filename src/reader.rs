@@ -1,4 +1,4 @@
-use crate::{DataLinkType, error::Error, packet::Packet};
+use crate::{DataLink, error::Error, packet::Packet};
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 
@@ -10,7 +10,7 @@ const NANOSECONDS_LITTLE_ENDIAN: [u8; 4] = [0xD4, 0x3C, 0xB2, 0xA1];
 pub struct Reader<T: AsyncRead> {
     source: T,
     max_length: u32,
-    data_link_type: DataLinkType,
+    data_link: DataLink,
 }
 
 impl<T: AsyncRead + std::marker::Unpin> Reader<T> {
@@ -49,7 +49,7 @@ impl<T: AsyncRead + std::marker::Unpin> Reader<T> {
             pcap_header[19],
         ]);
 
-        let data_link_type = DataLinkType::try_from(u32::from_ne_bytes([
+        let data_link = DataLink::try_from(u32::from_ne_bytes([
             pcap_header[20],
             pcap_header[21],
             pcap_header[22],
@@ -59,7 +59,7 @@ impl<T: AsyncRead + std::marker::Unpin> Reader<T> {
         Ok(Self {
             source,
             max_length,
-            data_link_type,
+            data_link,
         })
     }
 
@@ -94,11 +94,7 @@ impl<T: AsyncRead + std::marker::Unpin> Reader<T> {
         let mut bytes = vec![0; length as usize];
         self.source.read_exact(&mut bytes).await?;
 
-        Ok(Packet {
-            data_link_type: self.data_link_type,
-            epoch_seconds,
-            bytes,
-        })
+        Ok(Packet::new(self.data_link, epoch_seconds, bytes))
     }
 }
 
@@ -131,7 +127,7 @@ mod tests {
             0xa4, 0x93, 0xb8, 0x5e, 0xb6, 9, 0x0d, 0, 4, 0, 0, 0, 4, 0, 0, 0, 1, 2, 3, 4,
         ];
         let mut r = Reader::new(v.as_slice()).await.unwrap();
-        assert_eq!(r.read_packet().await.unwrap().bytes, vec![1, 2, 3, 4]);
+        assert_eq!(r.read_packet().await.unwrap().bytes(), vec![1, 2, 3, 4]);
     }
 
     #[tokio::test]
@@ -142,14 +138,18 @@ mod tests {
     #[tokio::test]
     async fn read_from_file() {
         let mut reader = Reader::from_file("packets.pcap").await.unwrap();
-        let packet = reader.read_packet().await.unwrap();
+        let mut packet = reader.read_packet().await.unwrap();
         let data = packet.data().unwrap();
         assert!(data.is_empty());
         let source_ip_address = packet.source_ip_address().unwrap();
         let destination_ip_address = packet.destination_ip_address().unwrap();
+        let source_port = packet.source_port().unwrap();
+        let destination_port = packet.destination_port().unwrap();
         let loopback = IpAddr::from([127, 0, 0, 1]);
-        assert_eq!(source_ip_address, loopback);
-        assert_eq!(destination_ip_address, loopback);
+        assert_eq!(source_ip_address, Some(loopback));
+        assert_eq!(destination_ip_address, Some(loopback));
+        assert_eq!(source_port, Some(7777));
+        assert_eq!(destination_port, Some(46493));
         for _ in 0..7 {
             reader.read_packet().await.unwrap();
         }

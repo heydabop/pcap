@@ -16,11 +16,13 @@ pub enum Error {
     UnsupportedLinkLayer(u32),
     UnsupportedTransport(u8),
     InvalidPacket(String),
+    InvalidIndex(usize, usize),
     UnsupportedEtherType([u8; 2]),
     InvalidIPHeader(String),
     UnsupportedProtocol(u8),
     IO(io::Error),
     TryFromSlice(array::TryFromSliceError),
+    EmptyPacket,
 }
 
 impl fmt::Display for Error {
@@ -46,6 +48,7 @@ impl fmt::Display for Error {
                 write!(f, "unsupported transport protocol {transport_protocol}")
             }
             InvalidPacket(s) => write!(f, "invalid packet: {s}"),
+            InvalidIndex(i, l) => write!(f, "tried to index byte {i} in a {l} length packet"),
             UnsupportedEtherType(ether_type) => {
                 write!(
                     f,
@@ -57,6 +60,7 @@ impl fmt::Display for Error {
             UnsupportedProtocol(protocol) => write!(f, "unsupported protocol {protocol}"),
             IO(e) => write!(f, "underlying IO error: {e}"),
             TryFromSlice(e) => write!(f, "unable to convert slice to array: {e}"),
+            EmptyPacket => write!(f, "packet has no data payload"),
         }
     }
 }
